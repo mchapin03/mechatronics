@@ -8,16 +8,23 @@
 
 #define CLK_STATE (PINE & (1<<PE4)) >> PE4
 #define DT_STATE (PINE & (1<<PE5)) >> PE5
+#define MAX_LENGTH 128
+char send_buf[MAX_LENGTH];
+volatile uint8_t recv_len = 0;
+volatile uint16_t send_len = 0;
+volatile uint8_t err_status = 0;
+volatile bool sending = false;
+volatile bool new_packet = false;
 volatile unsigned long CLK = 0;
 volatile unsigned long DT = 0;
 volatile long count = 0;
 volatile bool update = false;
-float revolutions = 0;
+double revolutions = 0;
 bool clockwise = false;
 char buffer[128];
 int PPR = 80;
 
-//todo: remove all calls to Serial and millis()
+
 void setup() {
     cli();
     DDRE = ~((1<<PE4)|(1<<PE5)); // assign inputs
@@ -29,21 +36,32 @@ void setup() {
     UCSR0B = 0b10011000;
     UCSR0C = 0b00000110;
     UBRR0H = 0b00000000;
-    UBRR0L = 103;
+    UBRR0L = 8;
     sei();
-    Serial.begin(115200);
+
+
+}
+void printBuffer() {
+    cli();
+    dtostrf(revolutions, 0, 4, send_buf);  // width=0, 4 decimals
+    send_len = strlen(send_buf);
+    send_buf[send_len] = '\n';
+    send_len++;
+    send_buf[send_len]   = '\0';
+    recv_len = 0;
+    err_status = 0;
+    new_packet = false;
+    sending = true;
+    sei();
+    UCSR0B |= (1 << UDRIE0);
 }
 void loop() {
     if (update) {
-        revolutions = (float)count/PPR;
-        snprintf(buffer, 64, "%f",revolutions);
-        Serial.println(revolutions, 4);
+        revolutions = (double)count/PPR;
+        printBuffer();
     }
     update = false;
 }
-
-print(); {
-    //print the current buffer;
 ISR(INT4_vect) {
     if (CLK_STATE != DT_STATE) {
         clockwise = false;
@@ -61,5 +79,16 @@ ISR(INT5_vect) {
     } else {
         clockwise = false;
         count--;
+    }
+}
+
+ISR(USART0_UDRE_vect) {
+    static uint16_t idx = 0;
+    if (idx < send_len) {
+        UDR0 = send_buf[idx++];
+    } else {
+        sending = false;
+        idx = 0;
+        UCSR0B &= ~(1 << 5);
     }
 }
