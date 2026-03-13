@@ -12,14 +12,6 @@ volatile bool sending = false;
 char temp1[20];
 char temp2[20];
 
-void setupTimer1PWM_100Hz_1ms() {
-
-}
-void setupTimer4InputCapture() {
-
-}
-
-
 void printBuffer() {
   cli();
   err_status = 0;
